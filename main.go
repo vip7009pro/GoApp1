@@ -8,10 +8,9 @@ import (
 	"os"
 
 	_ "github.com/denisenkom/go-mssqldb"
-
-	"github.com/gorilla/handlers"
-	"github.com/gorilla/mux"
 	"github.com/joho/godotenv"
+	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v4/middleware"
 )
 
 func main() {
@@ -20,41 +19,39 @@ func main() {
 		log.Fatalf("Error loading .env file")
 	}
 
-	router := mux.NewRouter()
+	e := echo.New()
 
-	// CORS settings
-	corsOptions := handlers.CORS(
-		handlers.AllowedOrigins([]string{"*"}),
-		handlers.AllowedMethods([]string{"GET", "POST", "PUT", "DELETE", "OPTIONS"}),
-		handlers.AllowedHeaders([]string{"Content-Type", "Authorization"}),
-	)
+	// CORS middleware
+	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
+		AllowOrigins: []string{"*"},
+		AllowMethods: []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodOptions},
+		AllowHeaders: []string{echo.HeaderContentType, echo.HeaderAuthorization},
+	}))
 
-	router.HandleFunc("/check", handleURLEncodedForm).Methods("GET")
-	router.HandleFunc("/api", YourAPIFunction).Methods("POST")
-	router.HandleFunc("/uploadfile", UploadFileFunction).Methods("POST")
+	e.GET("/check", handleURLEncodedForm)
+	e.POST("/api", YourAPIFunction)
+	e.POST("/uploadfile", UploadFileFunction)
 
 	API_PORT := os.Getenv("API_PORT")
 	log.Printf("Server starting at port %s", API_PORT)
-	log.Fatal(http.ListenAndServe(":"+API_PORT, corsOptions(router)))
+	e.Logger.Fatal(e.Start(":" + API_PORT))
 }
 
-func handleURLEncodedForm(w http.ResponseWriter, r *http.Request) {
+func handleURLEncodedForm(c echo.Context) error {
 	ConnectSQL()
-	r.ParseForm()
-	key1 := r.FormValue("hung")
-	key2 := r.FormValue("vanhung")
-	fmt.Fprintf(w, "Received Key1: %s, Key2: %s\n", key1, key2)
+	key1 := c.FormValue("hung")
+	key2 := c.FormValue("vanhung")
+	return c.String(http.StatusOK, fmt.Sprintf("Received Key1: %s, Key2: %s\n", key1, key2))
 }
 
-func YourAPIFunction(w http.ResponseWriter, r *http.Request) {
-	// Xử lý request API
-	w.Write([]byte("API Endpoint"))
-	fmt.Println(r)
+func YourAPIFunction(c echo.Context) error {
+	// Handle API request
+	return c.String(http.StatusOK, "API Endpoint")
 }
 
-func UploadFileFunction(w http.ResponseWriter, r *http.Request) {
-	// Xử lý upload file
-	w.Write([]byte("Upload File Endpoint"))
+func UploadFileFunction(c echo.Context) error {
+	// Handle file upload
+	return c.String(http.StatusOK, "Upload File Endpoint")
 }
 
 func ConnectSQL() {
