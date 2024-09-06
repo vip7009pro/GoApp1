@@ -164,12 +164,26 @@ func ProcessAPI(c echo.Context) string {
 		log.Printf("Error unmarshalling JSON: %v", err)
 		return "Error unmarshalling JSON"
 	}
-	/* fmt.Println(string(body))
-	fmt.Println(parsedBody) */
+
 	fmt.Println(parsedBody["command"])
+	command := parsedBody["command"].(string)
 	DATA := parsedBody["DATA"].(map[string]interface{})
-	fmt.Println(DATA["command1"])
-	fmt.Println(DATA["command2"])
-	result := ExcuteQuery("SELECT TOP 100 * FROM AMAZONE_DATA")
+	var result string
+	switch command {
+	case "login":
+		user := DATA["user"].(string)
+		pass := DATA["pass"].(string)
+		fmt.Println(user)
+		fmt.Println(pass)
+		result = ExcuteQuery("SELECT * FROM ZTBEMPLINFO WHERE EMPL_NO = '" + user + "' AND PASSWORD = '" + pass + "'")
+
+	case "get_data":
+		command1 := DATA["command1"].(string)
+		command2 := DATA["command2"].(string)
+		fmt.Println(command1)
+		fmt.Println(command2)
+		result = ExcuteQuery("SELECT TOP 100 * FROM AMAZONE_DATA")
+
+	}
 	return result
 }
