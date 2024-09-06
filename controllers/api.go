@@ -4,8 +4,11 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"os"
+
+	"github.com/labstack/echo/v4"
 )
 
 func ExcuteQuery(querystring string) string {
@@ -147,7 +150,26 @@ func ExcuteQuery(querystring string) string {
 	}
 	return string(jsonData)
 }
-func ProcessAPI() string {
-	return "OK"
+func ProcessAPI(c echo.Context) string {
+	requestBody := c.Request().Body
+	body, err := io.ReadAll(requestBody)
+	if err != nil {
+		log.Printf("Error reading request body: %v", err)
+		return "Error reading request body"
+	}
 
+	parsedBody := make(map[string]interface{})
+	err = json.Unmarshal(body, &parsedBody)
+	if err != nil {
+		log.Printf("Error unmarshalling JSON: %v", err)
+		return "Error unmarshalling JSON"
+	}
+	/* fmt.Println(string(body))
+	fmt.Println(parsedBody) */
+	fmt.Println(parsedBody["command"])
+	DATA := parsedBody["DATA"].(map[string]interface{})
+	fmt.Println(DATA["command1"])
+	fmt.Println(DATA["command2"])
+	result := ExcuteQuery("SELECT TOP 100 * FROM AMAZONE_DATA")
+	return result
 }

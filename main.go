@@ -1,15 +1,15 @@
 package main
 
 import (
-	"fmt"
 	"go-app/controllers"
-	"io"
 	"log"
 	"net/http"
 	"os"
 
 	_ "github.com/denisenkom/go-mssqldb"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/joho/godotenv"
+	echojwt "github.com/labstack/echo-jwt/v4"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 )
@@ -22,10 +22,47 @@ func main() {
 	e := echo.New()
 	// CORS middleware
 	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
-		AllowOrigins: []string{"http://localhost:3001"},
-		AllowMethods: []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodOptions},
-		AllowHeaders: []string{echo.HeaderContentType, echo.HeaderAuthorization},
+		AllowOrigins:     []string{"http://localhost:3001"},
+		AllowMethods:     []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodOptions},
+		AllowHeaders:     []string{echo.HeaderContentType, echo.HeaderAuthorization, echo.HeaderOrigin},
+		AllowCredentials: true,
 	}))
+	e.Use(middleware.GzipWithConfig(middleware.GzipConfig{
+		Level: 5,
+	}))
+	//install echo jwt
+
+	e.Use(echojwt.WithConfig(echojwt.Config{
+		SigningKey:  []byte(os.Getenv("JWT_SECRET")),
+		TokenLookup: "cookie:token",
+	}))
+
+	//create custom middleware
+	e.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			cookie, err := c.Cookie("token")
+			if err != nil {
+				return err
+			}
+			parsedToken, err := jwt.Parse(cookie.Value, func(token *jwt.Token) (interface{}, error) {
+				return []byte(os.Getenv("JWT_SECRET")), nil
+			})
+			if err != nil {
+				return err
+			}
+			claims, ok := parsedToken.Claims.(jwt.MapClaims)
+			if !ok {
+				return c.JSON(http.StatusInternalServerError, "Invalid token claims")
+			}
+			parsedTokenMap := make(map[string]interface{})
+			for key, value := range claims {
+				parsedTokenMap[key] = value
+			}
+			payload := parsedTokenMap["payload"]
+			c.Set("payload", payload)
+			return next(c)
+		}
+	})
 
 	e.GET("/", handleURLEncodedForm)
 	e.GET("/check", handleURLEncodedForm)
@@ -38,23 +75,34 @@ func main() {
 
 }
 func handleURLEncodedForm(c echo.Context) error {
-	result := controllers.ExcuteQuery("SELECT * FROM ZTB_REL_TESTPOINT")
-	fmt.Println(result)
-	return c.String(http.StatusOK, result)
+	//result := controllers.ExcuteQuery("SELECT * FROM ZTB_REL_TESTPOINT")
+	//read token from cookie
+	cookie, err := c.Cookie("token")
+	if err != nil {
+		return err
+	}
+	parsedToken, err := jwt.Parse(cookie.Value, func(token *jwt.Token) (interface{}, error) {
+		return []byte(os.Getenv("JWT_SECRET")), nil
+	})
+	if err != nil {
+		return err
+	}
+
+	claims, ok := parsedToken.Claims.(jwt.MapClaims)
+	if !ok {
+		return c.JSON(http.StatusInternalServerError, "Invalid token claims")
+	}
+	parsedTokenMap := make(map[string]interface{})
+	for key, value := range claims {
+		parsedTokenMap[key] = value
+	}
+
+	return c.JSON(http.StatusOK, parsedTokenMap)
+
 }
 
 func YourAPIFunction(c echo.Context) error {
-	// Handle API request
-	fmt.Println("YourAPIFunction")
-	requestBody := c.Request().Body
-	body, err := io.ReadAll(requestBody)
-	if err != nil {
-		log.Printf("Error reading request body: %v", err)
-		return c.String(http.StatusInternalServerError, "Error reading request body")
-	}
-
-	fmt.Println(string(body))
-	result := controllers.ProcessAPI()
+	result := controllers.ProcessAPI(c)
 	return c.String(http.StatusOK, result)
 }
 
