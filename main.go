@@ -13,7 +13,6 @@ import (
 	_ "github.com/denisenkom/go-mssqldb"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/joho/godotenv"
-	echojwt "github.com/labstack/echo-jwt/v4"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 )
@@ -36,11 +35,6 @@ func main() {
 	}))
 	//install echo jwt
 
-	e.Use(echojwt.WithConfig(echojwt.Config{
-		SigningKey:  []byte(os.Getenv("JWT_SECRET")),
-		TokenLookup: "cookie:token",
-	}))
-
 	//create custom middleware
 	e.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
@@ -50,6 +44,7 @@ func main() {
 				log.Printf("Error reading request body: %v", err)
 				return err
 			}
+			//fmt.Println(string(body))
 			parsedBody := make(map[string]interface{})
 			err = json.Unmarshal(body, &parsedBody)
 			if err != nil {
@@ -57,16 +52,17 @@ func main() {
 				return err
 			}
 
-			fmt.Println("vao day")
 			command := parsedBody["command"].(string)
 			fmt.Println(command)
 			if command == "login" {
+				c.Set("body", parsedBody)
 				return next(c)
 			}
 			cookie, err := c.Cookie("token")
 			if err != nil {
 				return err
 			}
+			fmt.Println(cookie.Value)
 			parsedToken, err := jwt.Parse(cookie.Value, func(token *jwt.Token) (interface{}, error) {
 				return []byte(os.Getenv("JWT_SECRET")), nil
 			})
@@ -82,11 +78,13 @@ func main() {
 				parsedTokenMap[key] = value
 			}
 			payload := parsedTokenMap["payload"]
+			fmt.Println(payload)
 			if payloadStr, ok := payload.(string); ok {
 				// Try to unmarshal as a map first
 				var payloadMap map[string]interface{}
 				err := json.Unmarshal([]byte(payloadStr), &payloadMap)
 				if err == nil {
+					c.Set("body", parsedBody)
 					c.Set("payload", payloadMap)
 					return next(c)
 				}
@@ -95,6 +93,7 @@ func main() {
 				var payloadArray []interface{}
 				err = json.Unmarshal([]byte(payloadStr), &payloadArray)
 				if err == nil {
+					c.Set("body", parsedBody)
 					c.Set("payload", payloadArray[0])
 					return next(c)
 				}
@@ -106,6 +105,11 @@ func main() {
 
 		}
 	})
+
+	/* 	e.Use(echojwt.WithConfig(echojwt.Config{
+		SigningKey:  []byte(os.Getenv("JWT_SECRET")),
+		TokenLookup: "cookie:token",
+	})) */
 
 	e.GET("/", handleURLEncodedForm)
 	e.GET("/check", handleURLEncodedForm)
@@ -131,10 +135,28 @@ func handleURLEncodedForm(c echo.Context) error {
 }
 
 func YourAPIFunction(c echo.Context) error {
-	result := controllers.ProcessAPI(c)
-	return c.String(http.StatusOK, result)
+	body := c.Get("body")
+	bodyMap, ok := body.(map[string]interface{})
+	if !ok {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Invalid body type"})
+	}
+	fmt.Println("vao YourAPIFunction")
+	payload := c.Get("payload")
+	payloadMap := make(map[string]interface{})
+	if payload != nil {
+		payloadMap, ok = payload.(map[string]interface{})
+		if !ok {
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Invalid payload type"})
+		}
+	}
+	result := controllers.ProcessAPI(bodyMap, payloadMap)
+	parsedResult := make(map[string]interface{})
+	err := json.Unmarshal([]byte(result), &parsedResult)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to parse result: " + err.Error()})
+	}
+	return c.JSON(http.StatusOK, parsedResult)
 }
-
 func UploadFileFunction(c echo.Context) error {
 	// Handle file upload
 	return c.String(http.StatusOK, "Upload File Endpoint")

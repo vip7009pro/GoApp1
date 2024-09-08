@@ -4,11 +4,11 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"os"
+	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/golang-jwt/jwt"
 )
 
 func ExcuteQuery(querystring string) string {
@@ -150,40 +150,63 @@ func ExcuteQuery(querystring string) string {
 	}
 	return string(jsonData)
 }
-func ProcessAPI(c echo.Context) string {
-	requestBody := c.Request().Body
-	body, err := io.ReadAll(requestBody)
-	if err != nil {
-		log.Printf("Error reading request body: %v", err)
-		return "Error reading request body"
-	}
+func ProcessAPI(body map[string]interface{}, payload map[string]interface{}) string {
 
-	parsedBody := make(map[string]interface{})
-	err = json.Unmarshal(body, &parsedBody)
-	if err != nil {
-		log.Printf("Error unmarshalling JSON: %v", err)
-		return "Error unmarshalling JSON"
-	}
+	command := body["command"].(string)
 
-	fmt.Println(parsedBody["command"])
-	command := parsedBody["command"].(string)
-	DATA := parsedBody["DATA"].(map[string]interface{})
-	var result string
 	switch command {
 	case "login":
-		user := DATA["user"].(string)
-		pass := DATA["pass"].(string)
-		fmt.Println(user)
-		fmt.Println(pass)
-		result = ExcuteQuery("SELECT * FROM ZTBEMPLINFO WHERE EMPL_NO = '" + user + "' AND PASSWORD = '" + pass + "'")
+		user := body["user"].(string)
+		pass := body["pass"].(string)
+		result := ExcuteQuery("SELECT * FROM ZTBEMPLINFO WHERE EMPL_NO = '" + user + "' AND PASSWORD = '" + pass + "'")
+		//convert result to map
+		var resultMap map[string]interface{}
+		err := json.Unmarshal([]byte(result), &resultMap)
+		if err != nil {
+			log.Fatal("Error unmarshalling JSON:", err.Error())
+		}
+		//get token from resultMap
+		data, ok := resultMap["data"].([]interface{})
+		if !ok || len(data) == 0 {
+			log.Fatal("Invalid data format in resultMap")
+		}
+		fmt.Println(data)
+		loginResult, ok := data[0].(map[string]interface{})
+		if !ok {
+			log.Fatal("Invalid login result format")
+		}
+		// Set expiration time to 5 minutes from now
+		expirationTime := time.Now().Add(5 * time.Minute)
 
-	case "get_data":
-		command1 := DATA["command1"].(string)
-		command2 := DATA["command2"].(string)
-		fmt.Println(command1)
-		fmt.Println(command2)
-		result = ExcuteQuery("SELECT TOP 100 * FROM AMAZONE_DATA")
+		token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+			"payload": loginResult,
+			"exp":     expirationTime.Unix(), // Add expiration claim
+		})
+		//new json
+		newJson := map[string]interface{}{
+			"tk_status": "OK",
+			"userData":  loginResult,
+		}
+		tokenString, err := token.SignedString([]byte(os.Getenv("JWT_SECRET")))
+		if err != nil {
+			log.Fatal("Error signing token:", err.Error())
+		}
+		newJson["token_content"] = tokenString
+		resultJson, err := json.Marshal(newJson)
+		if err != nil {
+			log.Fatal("Error marshalling JSON:", err.Error())
+		}
+		return string(resultJson)
 
+	case "checklogin":
+		DATA, ok := body["DATA"].(map[string]interface{})
+		if !ok {
+			log.Fatal("Invalid DATA format in body")
+		}
+		fmt.Println(DATA)
+		result := ExcuteQuery("SELECT WORK_STATUS_CODE FROM ZTBEMPLINFO WHERE EMPL_NO='" + payload["EMPL_NO"].(string) + "'")
+		fmt.Println(result)
+		return result
 	}
-	return result
+	return "error"
 }
