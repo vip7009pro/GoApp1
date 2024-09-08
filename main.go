@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"time"
 
 	"encoding/json"
 
@@ -53,7 +54,7 @@ func main() {
 			}
 
 			command := parsedBody["command"].(string)
-			fmt.Println(command)
+			fmt.Println(time.Now().Format("2006-01-02 15:04:05"), command)
 			if command == "login" {
 				c.Set("body", parsedBody)
 				return next(c)
@@ -62,54 +63,39 @@ func main() {
 			if err != nil {
 				return err
 			}
-			fmt.Println(cookie.Value)
+			//fmt.Println(cookie.Value)
 			parsedToken, err := jwt.Parse(cookie.Value, func(token *jwt.Token) (interface{}, error) {
 				return []byte(os.Getenv("JWT_SECRET")), nil
 			})
 			if err != nil {
 				return err
 			}
+			//fmt.Printf("parsedToken: %+v\n", parsedToken)
 			claims, ok := parsedToken.Claims.(jwt.MapClaims)
 			if !ok {
 				return c.JSON(http.StatusInternalServerError, "Invalid token claims")
 			}
+			//fmt.Printf("claims: %+v\n", claims)
 			parsedTokenMap := make(map[string]interface{})
 			for key, value := range claims {
 				parsedTokenMap[key] = value
 			}
+			//fmt.Printf("parsedTokenMap: %+v\n", parsedTokenMap)
 			payload := parsedTokenMap["payload"]
-			fmt.Println(payload)
-			if payloadStr, ok := payload.(string); ok {
-				// Try to unmarshal as a map first
-				var payloadMap map[string]interface{}
-				err := json.Unmarshal([]byte(payloadStr), &payloadMap)
-				if err == nil {
-					c.Set("body", parsedBody)
-					c.Set("payload", payloadMap)
-					return next(c)
-				}
-
-				// If that fails, try to unmarshal as an array
-				var payloadArray []interface{}
-				err = json.Unmarshal([]byte(payloadStr), &payloadArray)
-				if err == nil {
-					c.Set("body", parsedBody)
-					c.Set("payload", payloadArray[0])
-					return next(c)
-				}
-				// If both fail, return an error
-				return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to parse payload: " + err.Error()})
-			}
-			// If it's neither a string, map, nor array, return an error
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Invalid payload type"})
+			//fmt.Println(payload)
+			c.Set("body", parsedBody)
+			c.Set("payload", payload)
+			return next(c)
 
 		}
+
 	})
 
-	/* 	e.Use(echojwt.WithConfig(echojwt.Config{
-		SigningKey:  []byte(os.Getenv("JWT_SECRET")),
-		TokenLookup: "cookie:token",
-	})) */
+	/*
+		e.Use(echojwt.WithConfig(echojwt.Config{
+			SigningKey: []byte(os.Getenv("JWT_SECRET")),
+			TokenLookup: "cookie:token",
+		})) */
 
 	e.GET("/", handleURLEncodedForm)
 	e.GET("/check", handleURLEncodedForm)
@@ -140,7 +126,7 @@ func YourAPIFunction(c echo.Context) error {
 	if !ok {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Invalid body type"})
 	}
-	fmt.Println("vao YourAPIFunction")
+	//fmt.Println("vao YourAPIFunction")
 	payload := c.Get("payload")
 	payloadMap := make(map[string]interface{})
 	if payload != nil {

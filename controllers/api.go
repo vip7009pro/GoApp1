@@ -158,7 +158,7 @@ func ProcessAPI(body map[string]interface{}, payload map[string]interface{}) str
 	case "login":
 		user := body["user"].(string)
 		pass := body["pass"].(string)
-		result := ExcuteQuery("SELECT * FROM ZTBEMPLINFO WHERE EMPL_NO = '" + user + "' AND PASSWORD = '" + pass + "'")
+		result := ExcuteQuery("SELECT ZTBEMPLINFO.EMPL_IMAGE,ZTBEMPLINFO.CTR_CD,ZTBEMPLINFO.EMPL_NO,ZTBEMPLINFO.CMS_ID,ZTBEMPLINFO.FIRST_NAME,ZTBEMPLINFO.MIDLAST_NAME,ZTBEMPLINFO.DOB,ZTBEMPLINFO.HOMETOWN,ZTBEMPLINFO.SEX_CODE,ZTBEMPLINFO.ADD_PROVINCE,ZTBEMPLINFO.ADD_DISTRICT,ZTBEMPLINFO.ADD_COMMUNE,ZTBEMPLINFO.ADD_VILLAGE,ZTBEMPLINFO.PHONE_NUMBER,ZTBEMPLINFO.WORK_START_DATE,ZTBEMPLINFO.PASSWORD,ZTBEMPLINFO.EMAIL,ZTBEMPLINFO.WORK_POSITION_CODE,ZTBEMPLINFO.WORK_SHIFT_CODE,ZTBEMPLINFO.POSITION_CODE,ZTBEMPLINFO.JOB_CODE,ZTBEMPLINFO.FACTORY_CODE,ZTBEMPLINFO.WORK_STATUS_CODE,ZTBEMPLINFO.REMARK,ZTBEMPLINFO.ONLINE_DATETIME,ZTBSEX.SEX_NAME,ZTBSEX.SEX_NAME_KR,ZTBWORKSTATUS.WORK_STATUS_NAME,ZTBWORKSTATUS.WORK_STATUS_NAME_KR,ZTBFACTORY.FACTORY_NAME,ZTBFACTORY.FACTORY_NAME_KR,ZTBJOB.JOB_NAME,ZTBJOB.JOB_NAME_KR,ZTBPOSITION.POSITION_NAME,ZTBPOSITION.POSITION_NAME_KR,ZTBWORKSHIFT.WORK_SHIF_NAME,ZTBWORKSHIFT.WORK_SHIF_NAME_KR,ZTBWORKPOSITION.SUBDEPTCODE,ZTBWORKPOSITION.WORK_POSITION_NAME,ZTBWORKPOSITION.WORK_POSITION_NAME_KR,ZTBWORKPOSITION.ATT_GROUP_CODE,ZTBSUBDEPARTMENT.MAINDEPTCODE,ZTBSUBDEPARTMENT.SUBDEPTNAME,ZTBSUBDEPARTMENT.SUBDEPTNAME_KR,ZTBMAINDEPARMENT.MAINDEPTNAME,ZTBMAINDEPARMENT.MAINDEPTNAME_KR FROM ZTBEMPLINFO LEFT JOIN ZTBSEX ON (ZTBSEX.SEX_CODE = ZTBEMPLINFO.SEX_CODE) LEFT JOIN ZTBWORKSTATUS ON(ZTBWORKSTATUS.WORK_STATUS_CODE = ZTBEMPLINFO.WORK_STATUS_CODE) LEFT JOIN ZTBFACTORY ON (ZTBFACTORY.FACTORY_CODE = ZTBEMPLINFO.FACTORY_CODE) LEFT JOIN ZTBJOB ON (ZTBJOB.JOB_CODE = ZTBEMPLINFO.JOB_CODE) LEFT JOIN ZTBPOSITION ON (ZTBPOSITION.POSITION_CODE = ZTBEMPLINFO.POSITION_CODE) LEFT JOIN ZTBWORKSHIFT ON (ZTBWORKSHIFT.WORK_SHIFT_CODE = ZTBEMPLINFO.WORK_SHIFT_CODE) LEFT JOIN ZTBWORKPOSITION ON (ZTBWORKPOSITION.WORK_POSITION_CODE = ZTBEMPLINFO.WORK_POSITION_CODE) LEFT JOIN ZTBSUBDEPARTMENT ON (ZTBSUBDEPARTMENT.SUBDEPTCODE = ZTBWORKPOSITION.SUBDEPTCODE) LEFT JOIN ZTBMAINDEPARMENT ON (ZTBMAINDEPARMENT.MAINDEPTCODE = ZTBSUBDEPARTMENT.MAINDEPTCODE) WHERE ZTBEMPLINFO.EMPL_NO = '" + user + "' AND PASSWORD = '" + pass + "'")
 		//convert result to map
 		var resultMap map[string]interface{}
 		err := json.Unmarshal([]byte(result), &resultMap)
@@ -170,7 +170,7 @@ func ProcessAPI(body map[string]interface{}, payload map[string]interface{}) str
 		if !ok || len(data) == 0 {
 			log.Fatal("Invalid data format in resultMap")
 		}
-		fmt.Println(data)
+		//fmt.Println(data)
 		loginResult, ok := data[0].(map[string]interface{})
 		if !ok {
 			log.Fatal("Invalid login result format")
@@ -199,14 +199,44 @@ func ProcessAPI(body map[string]interface{}, payload map[string]interface{}) str
 		return string(resultJson)
 
 	case "checklogin":
-		DATA, ok := body["DATA"].(map[string]interface{})
-		if !ok {
-			log.Fatal("Invalid DATA format in body")
+		query := "SELECT WORK_STATUS_CODE FROM ZTBEMPLINFO WHERE EMPL_NO='" + payload["EMPL_NO"].(string) + "'"
+		result := ExcuteQuery(query)
+		resultmap := make(map[string]interface{})
+		err := json.Unmarshal([]byte(result), &resultmap)
+		if err != nil {
+			log.Fatal("Error unmarshalling JSON:", err.Error())
 		}
-		fmt.Println(DATA)
-		result := ExcuteQuery("SELECT WORK_STATUS_CODE FROM ZTBEMPLINFO WHERE EMPL_NO='" + payload["EMPL_NO"].(string) + "'")
-		fmt.Println(result)
-		return result
+		data, ok := resultmap["data"].([]interface{})
+		if !ok || len(data) == 0 {
+			log.Fatal("Invalid data format in resultmap")
+		}
+		workStatusCode, ok := data[0].(map[string]interface{})["WORK_STATUS_CODE"]
+		if !ok {
+			log.Fatal("Invalid work status code format")
+		}
+		if workStatusCode != 0 {
+			newjson := map[string]interface{}{
+				"tk_status": "OK",
+				"message":   "Success",
+				"data":      payload,
+			}
+			resultJson, err := json.Marshal(newjson)
+			if err != nil {
+				log.Fatal("Error marshalling JSON:", err.Error())
+			}
+			return string(resultJson)
+		} else {
+			newjson := map[string]interface{}{
+				"tk_status": "NG",
+				"message":   "Đã nghỉ việc",
+			}
+			resultJson, err := json.Marshal(newjson)
+			if err != nil {
+				log.Fatal("Error marshalling JSON:", err.Error())
+			}
+			return string(resultJson)
+		}
+
 	}
 	return "error"
 }
