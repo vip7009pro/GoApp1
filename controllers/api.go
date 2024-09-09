@@ -164,6 +164,8 @@ func ProcessAPI(body map[string]interface{}, payload map[string]interface{}) str
 		return CountThuongPhat(body, payload)
 	case "checkWebVersion":
 		return CheckWebVersion(body, payload)
+	case "checkMyChamCong":
+		return CheckMyChamCong(body, payload)
 	default:
 		return "error"
 	}

@@ -126,3 +126,58 @@ func CheckWebVersion(body map[string]interface{}, payload map[string]interface{}
 	result := ExcuteQuery(query)
 	return result
 }
+
+func CheckMyChamCong(body map[string]interface{}, payload map[string]interface{}) string {
+	query1 := `SELECT MIN(C001.CHECK_DATETIME) AS MIN_TIME, MAX(C001.CHECK_DATETIME) AS MAX_TIME  FROM C001 LEFT JOIN ZTBEMPLINFO ON (C001.NV_CCID = ZTBEMPLINFO.NV_CCID) WHERE C001.CHECK_DATE = CAST(GETDATE() as date) AND ZTBEMPLINFO.EMPL_NO='` + payload["EMPL_NO"].(string) + `'`
+	result1 := ExcuteQuery(query1)
+	query2 := `SELECT ZTBEMPLINFO.EMPL_IMAGE,ZTBEMPLINFO.CTR_CD,ZTBEMPLINFO.EMPL_NO,ZTBEMPLINFO.CMS_ID,ZTBEMPLINFO.FIRST_NAME,ZTBEMPLINFO.MIDLAST_NAME,ZTBEMPLINFO.DOB,ZTBEMPLINFO.HOMETOWN,ZTBEMPLINFO.SEX_CODE,ZTBEMPLINFO.ADD_PROVINCE,ZTBEMPLINFO.ADD_DISTRICT,ZTBEMPLINFO.ADD_COMMUNE,ZTBEMPLINFO.ADD_VILLAGE,ZTBEMPLINFO.PHONE_NUMBER,ZTBEMPLINFO.WORK_START_DATE,ZTBEMPLINFO.PASSWORD,ZTBEMPLINFO.EMAIL,ZTBEMPLINFO.WORK_POSITION_CODE,ZTBEMPLINFO.WORK_SHIFT_CODE,ZTBEMPLINFO.POSITION_CODE,ZTBEMPLINFO.JOB_CODE,ZTBEMPLINFO.FACTORY_CODE,ZTBEMPLINFO.WORK_STATUS_CODE,ZTBEMPLINFO.REMARK,ZTBEMPLINFO.ONLINE_DATETIME,ZTBSEX.SEX_NAME,ZTBSEX.SEX_NAME_KR,ZTBWORKSTATUS.WORK_STATUS_NAME,ZTBWORKSTATUS.WORK_STATUS_NAME_KR,ZTBFACTORY.FACTORY_NAME,ZTBFACTORY.FACTORY_NAME_KR,ZTBJOB.JOB_NAME,ZTBJOB.JOB_NAME_KR,ZTBPOSITION.POSITION_NAME,ZTBPOSITION.POSITION_NAME_KR,ZTBWORKSHIFT.WORK_SHIF_NAME,ZTBWORKSHIFT.WORK_SHIF_NAME_KR,ZTBWORKPOSITION.SUBDEPTCODE,ZTBWORKPOSITION.WORK_POSITION_NAME,ZTBWORKPOSITION.WORK_POSITION_NAME_KR,ZTBWORKPOSITION.ATT_GROUP_CODE,ZTBSUBDEPARTMENT.MAINDEPTCODE,ZTBSUBDEPARTMENT.SUBDEPTNAME,ZTBSUBDEPARTMENT.SUBDEPTNAME_KR,ZTBMAINDEPARMENT.MAINDEPTNAME,ZTBMAINDEPARMENT.MAINDEPTNAME_KR FROM ZTBEMPLINFO LEFT JOIN ZTBSEX ON (ZTBSEX.SEX_CODE = ZTBEMPLINFO.SEX_CODE) LEFT JOIN ZTBWORKSTATUS ON(ZTBWORKSTATUS.WORK_STATUS_CODE = ZTBEMPLINFO.WORK_STATUS_CODE) LEFT JOIN ZTBFACTORY ON (ZTBFACTORY.FACTORY_CODE = ZTBEMPLINFO.FACTORY_CODE) LEFT JOIN ZTBJOB ON (ZTBJOB.JOB_CODE = ZTBEMPLINFO.JOB_CODE) LEFT JOIN ZTBPOSITION ON (ZTBPOSITION.POSITION_CODE = ZTBEMPLINFO.POSITION_CODE) LEFT JOIN ZTBWORKSHIFT ON (ZTBWORKSHIFT.WORK_SHIFT_CODE = ZTBEMPLINFO.WORK_SHIFT_CODE) LEFT JOIN ZTBWORKPOSITION ON (ZTBWORKPOSITION.WORK_POSITION_CODE = ZTBEMPLINFO.WORK_POSITION_CODE) LEFT JOIN ZTBSUBDEPARTMENT ON (ZTBSUBDEPARTMENT.SUBDEPTCODE = ZTBWORKPOSITION.SUBDEPTCODE) LEFT JOIN ZTBMAINDEPARMENT ON (ZTBMAINDEPARMENT.MAINDEPTCODE = ZTBSUBDEPARTMENT.MAINDEPTCODE) WHERE ZTBEMPLINFO.EMPL_NO = '` + payload["EMPL_NO"].(string) + `' AND PASSWORD = '` + payload["PASSWORD"].(string) + `'`
+	result2 := ExcuteQuery(query2)
+
+	resultmap1 := make(map[string]interface{})
+	err := json.Unmarshal([]byte(result1), &resultmap1)
+	if err != nil {
+		log.Fatal("Error unmarshalling JSON:", err.Error())
+	}
+
+	resultmap2 := make(map[string]interface{})
+	err = json.Unmarshal([]byte(result2), &resultmap2)
+	if err != nil {
+		log.Fatal("Error unmarshalling JSON:", err.Error())
+	}
+
+	var resultMap map[string]interface{}
+	err = json.Unmarshal([]byte(result2), &resultMap)
+	if err != nil {
+		log.Fatal("Error unmarshalling JSON:", err.Error())
+	}
+	//get token from resultMap
+	data, ok := resultMap["data"].([]interface{})
+	if !ok || len(data) == 0 {
+		log.Fatal("Invalid data format in resultMap")
+	}
+	//fmt.Println(data)
+	loginResult, ok := data[0].(map[string]interface{})
+	if !ok {
+		log.Fatal("Invalid login result format")
+	}
+	// Set expiration time to 5 minutes from now
+	expirationTime := time.Now().Add(5 * time.Minute)
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"payload": loginResult,
+		"exp":     expirationTime.Unix(), // Add expiration claim
+	})
+	tokenString, err := token.SignedString([]byte(os.Getenv("JWT_SECRET")))
+	if err != nil {
+		log.Fatal("Error signing token:", err.Error())
+	}
+
+	//add REFRESH_TOKEN to resultmap1
+	resultmap1["REFRESH_TOKEN"] = tokenString
+
+	resultJson, err := json.Marshal(resultmap1)
+	if err != nil {
+		log.Fatal("Error marshalling JSON:", err.Error())
+	}
+	return string(resultJson)
+}
