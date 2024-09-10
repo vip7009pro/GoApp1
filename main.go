@@ -13,6 +13,7 @@ import (
 
 	_ "github.com/denisenkom/go-mssqldb"
 	"github.com/golang-jwt/jwt/v5"
+	socketio "github.com/googollee/go-socket.io"
 	"github.com/joho/godotenv"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
@@ -26,7 +27,7 @@ func main() {
 	e := echo.New()
 	// CORS middleware
 	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
-		AllowOrigins:     []string{"http://localhost:3001"},
+		AllowOrigins:     []string{"http://localhost:3001", "http://cms.ddns.net:3002"},
 		AllowMethods:     []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodOptions},
 		AllowHeaders:     []string{echo.HeaderContentType, echo.HeaderAuthorization, echo.HeaderOrigin},
 		AllowCredentials: true,
@@ -45,14 +46,12 @@ func main() {
 				log.Printf("Error reading request body: %v", err)
 				return err
 			}
-			//fmt.Println(string(body))
 			parsedBody := make(map[string]interface{})
 			err = json.Unmarshal(body, &parsedBody)
 			if err != nil {
 				log.Printf("Error unmarshalling JSON: %v", err)
 				return err
 			}
-
 			command := parsedBody["command"].(string)
 			fmt.Println(time.Now().Format("2006-01-02 15:04:05"), command)
 			if command == "login" {
@@ -86,7 +85,6 @@ func main() {
 			c.Set("body", parsedBody)
 			c.Set("payload", payload)
 			return next(c)
-
 		}
 
 	})
@@ -101,6 +99,31 @@ func main() {
 	e.GET("/check", handleURLEncodedForm)
 	e.POST("/api", YourAPIFunction)
 	e.POST("/uploadfile", UploadFileFunction)
+
+	// Initialize Socket.IO server
+	server := socketio.NewServer(nil)
+
+	// Handle new connections
+	server.OnConnect("/", func(s socketio.Conn) error {
+		s.SetContext("")
+		fmt.Println("New connection:", s.ID())
+		return nil
+	})
+
+	// Handle disconnections
+	server.OnDisconnect("/", func(s socketio.Conn, reason string) {
+		fmt.Println("Disconnected:", s.ID(), "Reason:", reason)
+	})
+
+	// Serve Socket.IO
+	go server.Serve()
+	defer server.Close()
+
+	// Attach Socket.IO server to HTTP server
+	e.GET("/socket.io/", func(c echo.Context) error {
+		server.ServeHTTP(c.Response(), c.Request())
+		return nil
+	})
 
 	API_PORT := os.Getenv("API_PORT")
 	log.Printf("Server starting at port %s", API_PORT)
@@ -119,7 +142,6 @@ func handleURLEncodedForm(c echo.Context) error {
 	}
 	return c.JSON(http.StatusOK, emplNo)
 }
-
 func YourAPIFunction(c echo.Context) error {
 	body := c.Get("body")
 	bodyMap, ok := body.(map[string]interface{})

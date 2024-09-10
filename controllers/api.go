@@ -162,10 +162,12 @@ func ProcessAPI(body map[string]interface{}, payload map[string]interface{}) str
 		return CheckinConfirm(body, payload)
 	case "countthuongphat":
 		return CountThuongPhat(body, payload)
-	case "checkWebVersion":
+	case "checkWebVer":
 		return CheckWebVersion(body, payload)
-	case "checkMyChamCong":
+	case "checkMYCHAMCONG":
 		return CheckMyChamCong(body, payload)
+	case "checkLicense":
+		return CheckLicense(body, payload)
 	default:
 		return "error"
 	}

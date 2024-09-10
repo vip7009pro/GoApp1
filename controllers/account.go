@@ -2,12 +2,16 @@ package controllers
 
 import (
 	"encoding/json"
+	"io"
 	"log"
+	"net/http"
 	"os"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 )
+
+const CURRENT_API_URL = "https://script.google.com/macros/s/AKfycbyD_LRqVLETu8IvuiqDSsbItdmzRw3p_q9gCv12UOer0V-5OnqtbJvKjK86bfgGbUM1NA/exec"
 
 func Login(body map[string]interface{}, payload map[string]interface{}) string {
 	user := body["user"].(string)
@@ -180,4 +184,70 @@ func CheckMyChamCong(body map[string]interface{}, payload map[string]interface{}
 		log.Fatal("Error marshalling JSON:", err.Error())
 	}
 	return string(resultJson)
+}
+
+func CheckLicense(body map[string]interface{}, payload map[string]interface{}) string {
+	//fetch data from CURRENT_API_URL
+	DATA := body["DATA"].(map[string]interface{})
+	resp, err := http.Get(CURRENT_API_URL)
+	if err != nil {
+		log.Fatal("Error fetching data:", err.Error())
+	}
+	defer resp.Body.Close()
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Fatal("Error reading response body:", err.Error())
+	}
+	//convert bodyBytes to array of string array
+	var bodyArray [][]interface{}
+	//bodyBytes is array of string array but in byte, unmarshal it into bodyArray
+	err1 := json.Unmarshal(bodyBytes, &bodyArray)
+	if err1 != nil {
+		log.Fatal("Error unmarshalling JSON:", err1.Error())
+	}
+	//filter bodyarray elements which have its first element is equal to DATA["COMPANY"]
+	var filteredArray [][]interface{}
+	for _, v := range bodyArray {
+		if v[0] == DATA["COMPANY"] {
+			filteredArray = append(filteredArray, v)
+		}
+	}
+	if len(filteredArray) == 0 {
+		newJson := map[string]interface{}{
+			"tk_status": "NG",
+			"message":   "Kiểm tra license thất bại !",
+		}
+		resultJson, err := json.Marshal(newJson)
+		if err != nil {
+			log.Fatal("Error marshalling JSON:", err.Error())
+		}
+		return string(resultJson)
+	}
+	expdate := filteredArray[0][1]
+	parsedExpdate, err := time.Parse("2006-01-02T15:04:05.000Z", expdate.(string))
+	if err != nil {
+		log.Fatal("Error parsing expdate:", err.Error())
+	}
+	currentDate := time.Now()
+	if parsedExpdate.Before(currentDate) {
+		newJson := map[string]interface{}{
+			"tk_status": "NG",
+			"message":   "License đã hết hạn !",
+		}
+		resultJson, err := json.Marshal(newJson)
+		if err != nil {
+			log.Fatal("Error marshalling JSON:", err.Error())
+		}
+		return string(resultJson)
+	}
+	newJson := map[string]interface{}{
+		"tk_status": "OK",
+		"message":   "License còn hạn !",
+	}
+	resultJson, err := json.Marshal(newJson)
+	if err != nil {
+		log.Fatal("Error marshalling JSON:", err.Error())
+	}
+	return string(resultJson)
+
 }
