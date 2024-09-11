@@ -168,7 +168,18 @@ func ProcessAPI(body map[string]interface{}, payload map[string]interface{}) str
 		return CheckMyChamCong(body, payload)
 	case "checkLicense":
 		return CheckLicense(body, payload)
+	case "diemdanhnhom":
+		return DiemDanhNhom(body, payload)
 	default:
-		return "error"
+		newjson := map[string]interface{}{
+			"data":      nil,
+			"tk_status": "NG",
+			"message":   "Command not found",
+		}
+		jsonData, err := json.Marshal(newjson)
+		if err != nil {
+			log.Fatal("Error marshalling JSON:", err.Error())
+		}
+		return string(jsonData)
 	}
 }
