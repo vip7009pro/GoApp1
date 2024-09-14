@@ -25,6 +25,7 @@ func main() {
 		log.Fatalf("Error loading .env file")
 	}
 	e := echo.New()
+	f := echo.New()
 	// CORS middleware
 	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
 		AllowOrigins:     []string{"http://localhost:3001", "http://cms.ddns.net:3002"},
@@ -35,7 +36,20 @@ func main() {
 	e.Use(middleware.GzipWithConfig(middleware.GzipConfig{
 		Level: 5,
 	}))
+
+	f.Use(middleware.CORSWithConfig(middleware.CORSConfig{
+		AllowOrigins:     []string{"http://localhost:3001", "http://cms.ddns.net:3002"},
+		AllowMethods:     []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodOptions},
+		AllowHeaders:     []string{echo.HeaderContentType, echo.HeaderAuthorization, echo.HeaderOrigin},
+		AllowCredentials: true,
+	}))
+	f.Use(middleware.GzipWithConfig(middleware.GzipConfig{
+		Level: 5,
+	}))
 	//install echo jwt
+
+	/* 	f.Use(middleware.Logger())
+	   	f.Use(middleware.Recover()) */
 
 	//create custom middleware
 	e.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
@@ -95,11 +109,6 @@ func main() {
 			TokenLookup: "cookie:token",
 		})) */
 
-	e.GET("/", handleURLEncodedForm)
-	e.GET("/check", handleURLEncodedForm)
-	e.POST("/api", YourAPIFunction)
-	e.POST("/uploadfile", UploadFileFunction)
-
 	// Initialize Socket.IO server
 	server := socketio.NewServer(nil)
 
@@ -108,6 +117,11 @@ func main() {
 		s.SetContext("")
 		fmt.Println("New connection:", s.ID())
 		return nil
+	})
+
+	server.OnEvent("/", "message", func(s socketio.Conn, msg string) {
+		log.Printf("Received message: %s", msg)
+		s.Emit("reply", "Message received: "+msg)
 	})
 
 	// Handle disconnections
@@ -120,15 +134,34 @@ func main() {
 	defer server.Close()
 
 	// Attach Socket.IO server to HTTP server
-	e.GET("/socket.io/", func(c echo.Context) error {
-		server.ServeHTTP(c.Response(), c.Request())
-		return nil
-	})
+	/* f.GET("/socket.io/*", func(c echo.Context) error {
+		fmt.Println("Socket.IO connection")
+		return handleSocketIO(c, server)
+	}) */
+	f.Any("/socket.io/*", echo.WrapHandler(server))
+
+	e.GET("/", handleURLEncodedForm)
+	e.GET("/check", handleURLEncodedForm)
+	e.POST("/api", YourAPIFunction)
+	e.POST("/uploadfile", UploadFileFunction)
 
 	API_PORT := os.Getenv("API_PORT")
-	log.Printf("Server starting at port %s", API_PORT)
-	e.Logger.Fatal(e.Start(":" + API_PORT))
+	SOCKET_PORT := os.Getenv("SOCKET_PORT")
+	log.Printf("Http Server starting at port %s", API_PORT)
+	log.Printf("Socket.IO Server starting at port %s", SOCKET_PORT)
 
+	go func() {
+		f.Logger.Fatal(f.Start(":3006"))
+	}()
+	go func() {
+		f.Logger.Fatal(e.Start(":3002"))
+	}()
+	select {}
+}
+
+func handleSocketIO(c echo.Context, server *socketio.Server) error {
+	server.ServeHTTP(c.Response(), c.Request())
+	return nil
 }
 func handleURLEncodedForm(c echo.Context) error {
 	payload := c.Get("payload")
